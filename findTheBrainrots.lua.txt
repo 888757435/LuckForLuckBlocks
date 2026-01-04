@@ -1,0 +1,819 @@
+-- Tp Tool System
+-- By: Brainrot Manager
+
+-- Serviços
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+
+-- Player
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+-- Configurações
+local BRAINROTS_FOLDER_NAME = "Brainrots"
+local TELEPORT_DELAY = 1.6
+local SCAN_INTERVAL = 1
+
+-- Estado
+local brainrotManager = {
+	Enabled = false,
+	CurrentIndex = 1,
+	BrainrotFolder = nil,
+	BrainrotModels = {},
+	ActiveTween = nil,
+	Scanning = false,
+	TpToolActive = false,
+	SelectedModel = nil,
+	IsMinimized = false
+}
+
+-- Cache de referências
+local screenGui
+local mainFrame
+local titleBar
+local contentFrame
+local brainrotListFrame
+local searchBox
+local brainrotListScrolling
+local statusLabel
+local teleportButton
+local toggleButton
+local tpToolButton
+local minimizeButton
+local maximizeButton
+local closeButton
+
+-- Cores da interface
+local ColorPalette = {
+	Primary = Color3.fromRGB(25, 25, 35),
+	Secondary = Color3.fromRGB(35, 35, 50),
+	Accent = Color3.fromRGB(100, 70, 200),
+	Text = Color3.fromRGB(240, 240, 255),
+	Success = Color3.fromRGB(70, 200, 100),
+	Warning = Color3.fromRGB(255, 180, 50),
+	Danger = Color3.fromRGB(220, 70, 70)
+}
+
+-- Funções de utilidade
+local function createRoundedFrame(parent, size, position)
+	local frame = Instance.new("Frame")
+	frame.BackgroundColor3 = ColorPalette.Secondary
+	frame.Size = size
+	frame.Position = position or UDim2.new(0, 0, 0, 0)
+	frame.Parent = parent
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = frame
+	
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(60, 60, 80)
+	stroke.Thickness = 2
+	stroke.Parent = frame
+	
+	return frame
+end
+
+local function createTextLabel(parent, text, size, position, textSize)
+	local label = Instance.new("TextLabel")
+	label.Text = text
+	label.Size = size
+	label.Position = position
+	label.BackgroundTransparency = 1
+	label.TextColor3 = ColorPalette.Text
+	label.TextSize = textSize or 14
+	label.Font = Enum.Font.Gotham
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = parent
+	return label
+end
+
+local function createButton(parent, text, size, position)
+	local button = Instance.new("TextButton")
+	button.Text = text
+	button.Size = size
+	button.Position = position
+	button.BackgroundColor3 = ColorPalette.Accent
+	button.TextColor3 = ColorPalette.Text
+	button.TextSize = 14
+	button.Font = Enum.Font.GothamBold
+	button.AutoButtonColor = false
+	button.Parent = parent
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = button
+	
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(120, 90, 220)
+	stroke.Thickness = 2
+	stroke.Parent = button
+	
+	-- Efeitos hover
+	button.MouseEnter:Connect(function()
+		game:GetService("TweenService"):Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(120, 90, 220)}):Play()
+	end)
+	
+	button.MouseLeave:Connect(function()
+		game:GetService("TweenService"):Create(button, TweenInfo.new(0.2), {BackgroundColor3 = ColorPalette.Accent}):Play()
+	end)
+	
+	button.MouseButton1Down:Connect(function()
+		game:GetService("TweenService"):Create(button, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(80, 50, 180)}):Play()
+	end)
+	
+	button.MouseButton1Up:Connect(function()
+		game:GetService("TweenService"):Create(button, TweenInfo.new(0.1), {BackgroundColor3 = ColorPalette.Accent}):Play()
+	end)
+	
+	return button
+end
+
+-- Função para encontrar a pasta Brainrots
+local function findBrainrotFolder()
+	local workspaceFolders = Workspace:GetChildren()
+	for _, folder in ipairs(workspaceFolders) do
+		if folder.Name == BRAINROTS_FOLDER_NAME and folder:IsA("Folder") then
+			return folder
+		end
+	end
+	return nil
+end
+
+-- Função para escanear modelos na pasta Brainrots
+local function scanBrainrotModels()
+	brainrotManager.BrainrotFolder = findBrainrotFolder()
+	brainrotManager.BrainrotModels = {}
+	
+	if brainrotManager.BrainrotFolder then
+		for _, item in ipairs(brainrotManager.BrainrotFolder:GetChildren()) do
+			if item:IsA("Model") or item:IsA("BasePart") then
+				table.insert(brainrotManager.BrainrotModels, {
+					Name = item.Name,
+					Object = item,
+					Position = item:IsA("BasePart") and item.Position or item:GetPivot().Position
+				})
+			end
+		end
+		
+		-- Ordenar alfabeticamente
+		table.sort(brainrotManager.BrainrotModels, function(a, b)
+			return a.Name:lower() < b.Name:lower()
+		end)
+	end
+	
+	return brainrotManager.BrainrotModels
+end
+
+-- Função para teleportar para um modelo específico
+local function teleportToModel(modelIndex)
+	if not brainrotManager.BrainrotModels[modelIndex] then return end
+	
+	local model = brainrotManager.BrainrotModels[modelIndex]
+	character = player.Character or player.CharacterAdded:Wait()
+	
+	if character and character:FindFirstChild("HumanoidRootPart") then
+		-- Encontrar posição segura para teleportar
+		local targetCFrame
+		if model.Object:IsA("BasePart") then
+			targetCFrame = model.Object.CFrame + Vector3.new(0, 3, 0)
+		else
+			targetCFrame = model.Object:GetPivot() + Vector3.new(0, 3, 0)
+		end
+		
+		character.HumanoidRootPart.CFrame = targetCFrame
+		brainrotManager.SelectedModel = modelIndex
+		
+		-- Atualizar status
+		if statusLabel then
+			statusLabel.Text = "Teleported to: " .. model.Name
+			statusLabel.TextColor3 = ColorPalette.Success
+			
+			-- Resetar cor após 2 segundos
+			task.delay(2, function()
+				if statusLabel then
+					statusLabel.TextColor3 = ColorPalette.Text
+				end
+			end)
+		end
+	end
+end
+
+-- Função para atualizar a lista de brainrots
+local function updateBrainrotList(searchTerm)
+	if not brainrotListScrolling then return end
+	
+	-- Limpar lista atual
+	for _, child in ipairs(brainrotListScrolling:GetChildren()) do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+	
+	-- Filtrar modelos baseado no termo de busca
+	local filteredModels = brainrotManager.BrainrotModels
+	
+	if searchTerm and searchTerm ~= "" then
+		filteredModels = {}
+		for _, model in ipairs(brainrotManager.BrainrotModels) do
+			if model.Name:lower():find(searchTerm:lower()) then
+				table.insert(filteredModels, model)
+			end
+		end
+	end
+	
+	-- Criar itens da lista
+	for index, model in ipairs(filteredModels) do
+		local itemFrame = Instance.new("Frame")
+		itemFrame.Size = UDim2.new(1, -10, 0, 40)
+		itemFrame.Position = UDim2.new(0, 5, 0, (index-1) * 45)
+		itemFrame.BackgroundColor3 = index % 2 == 0 and Color3.fromRGB(40, 40, 55) or Color3.fromRGB(45, 45, 60)
+		itemFrame.Parent = brainrotListScrolling
+		
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 6)
+		corner.Parent = itemFrame
+		
+		local nameLabel = Instance.new("TextLabel")
+		nameLabel.Text = model.Name
+		nameLabel.Size = UDim2.new(0.7, 0, 1, 0)
+		nameLabel.Position = UDim2.new(0, 10, 0, 0)
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.TextColor3 = ColorPalette.Text
+		nameLabel.TextSize = 14
+		nameLabel.Font = Enum.Font.Gotham
+		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+		nameLabel.Parent = itemFrame
+		
+		local teleportBtn = Instance.new("TextButton")
+		teleportBtn.Text = "TP"
+		teleportBtn.Size = UDim2.new(0, 60, 0, 30)
+		teleportBtn.Position = UDim2.new(0.75, 0, 0.5, -15)
+		teleportBtn.BackgroundColor3 = ColorPalette.Accent
+		teleportBtn.TextColor3 = ColorPalette.Text
+		teleportBtn.TextSize = 12
+		teleportBtn.Font = Enum.Font.GothamBold
+		teleportBtn.AutoButtonColor = false
+		teleportBtn.Parent = itemFrame
+		
+		local btnCorner = Instance.new("UICorner")
+		btnCorner.CornerRadius = UDim.new(0, 4)
+		btnCorner.Parent = teleportBtn
+		
+		-- Efeitos do botão
+		teleportBtn.MouseEnter:Connect(function()
+			game:GetService("TweenService"):Create(teleportBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(120, 90, 220)}):Play()
+		end)
+		
+		teleportBtn.MouseLeave:Connect(function()
+			game:GetService("TweenService"):Create(teleportBtn, TweenInfo.new(0.2), {BackgroundColor3 = ColorPalette.Accent}):Play()
+		end)
+		
+		-- Teleportar ao clicar
+		teleportBtn.MouseButton1Click:Connect(function()
+			teleportToModel(index)
+			if brainrotListFrame then
+				brainrotListFrame.Visible = false
+			end
+		end)
+		
+		-- Teleportar ao clicar no item inteiro
+		itemFrame.MouseButton1Click:Connect(function()
+			teleportToModel(index)
+			if brainrotListFrame then
+				brainrotListFrame.Visible = false
+			end
+		end)
+	end
+	
+	-- Atualizar tamanho da lista
+	brainrotListScrolling.CanvasSize = UDim2.new(0, 0, 0, #filteredModels * 45)
+end
+
+-- Função para iniciar/parar o teleporte automático
+local function toggleAutoTeleport()
+	brainrotManager.Enabled = not brainrotManager.Enabled
+	
+	if toggleButton then
+		toggleButton.Text = brainrotManager.Enabled and "Stop Auto TP" or "Start Auto TP"
+		toggleButton.BackgroundColor3 = brainrotManager.Enabled and ColorPalette.Danger or ColorPalette.Accent
+	end
+	
+	if statusLabel then
+		statusLabel.Text = brainrotManager.Enabled and "Auto TP: ON" or "Auto TP: OFF"
+		statusLabel.TextColor3 = brainrotManager.Enabled and ColorPalette.Success or ColorPalette.Text
+	end
+	
+	if brainrotManager.Enabled then
+		brainrotManager.CurrentIndex = 1
+		scanBrainrotModels()
+		
+		-- Iniciar loop de teleporte
+		spawn(function()
+			while brainrotManager.Enabled and #brainrotManager.BrainrotModels > 0 do
+				teleportToModel(brainrotManager.CurrentIndex)
+				
+				-- Avançar para o próximo modelo
+				brainrotManager.CurrentIndex = brainrotManager.CurrentIndex + 1
+				if brainrotManager.CurrentIndex > #brainrotManager.BrainrotModels then
+					brainrotManager.CurrentIndex = 1
+				end
+				
+				-- Aguardar o delay
+				task.wait(TELEPORT_DELAY)
+			end
+		end)
+	else
+		-- Voltar para o spawn
+		character = player.Character or player.CharacterAdded:Wait()
+		if character and character:FindFirstChild("HumanoidRootPart") then
+			local spawnLocation = Workspace:FindFirstChild("SpawnLocation")
+			if spawnLocation then
+				character.HumanoidRootPart.CFrame = spawnLocation.CFrame + Vector3.new(0, 3, 0)
+			end
+		end
+	end
+end
+
+-- Função para criar a ferramenta de teleporte
+local function createTpTool()
+	if brainrotManager.TpToolActive then return end
+	
+	brainrotManager.TpToolActive = true
+	
+	-- Criar a ferramenta
+	local tool = Instance.new("Tool")
+	tool.Name = "TpTool"
+	tool.RequiresHandle = true
+	tool.CanBeDropped = false
+	
+	-- Criar o handle (em formato de olho)
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(0.5, 0.5, 0.5)
+	handle.BrickColor = BrickColor.new("Bright blue")
+	handle.Material = EnumMaterial.Neon
+	handle.Transparency = 0.3
+	handle.Parent = tool
+	
+	-- Criar decal do olho
+	local decal = Instance.new("Decal")
+	decal.Texture = "rbxasset://textures/face.png"
+	decal.Face = Enum.NormalId.Front
+	decal.Parent = handle
+	
+	-- Criar luz
+	local pointLight = Instance.new("PointLight")
+	pointLight.Brightness = 1
+	pointLight.Range = 10
+	pointLight.Color = Color3.fromRGB(100, 150, 255)
+	pointLight.Parent = handle
+	
+	-- Adicionar à mochila do jogador
+	tool.Parent = player.Backpack
+	
+	-- Função para teleportar ao clicar
+	tool.Activated:Connect(function()
+		if not character or not character:FindFirstChild("HumanoidRootPart") then
+			character = player.Character or player.CharacterAdded:Wait()
+		end
+		
+		-- Obter posição do mouse
+		local mouse = player:GetMouse()
+		local targetPosition = mouse.Hit.Position
+		
+		-- Teleportar para a posição
+		character.HumanoidRootPart.CFrame = CFrame.new(targetPosition + Vector3.new(0, 3, 0))
+		
+		-- Efeito visual
+		local effect = Instance.new("Part")
+		effect.Size = Vector3.new(2, 0.1, 2)
+		effect.Position = targetPosition + Vector3.new(0, 0.1, 0)
+		effect.Anchored = true
+		effect.CanCollide = false
+		effect.Material = EnumMaterial.Neon
+		effect.BrickColor = BrickColor.new("Bright blue")
+		effect.Transparency = 0.5
+		effect.Parent = Workspace
+		
+		-- Remover efeito após 1 segundo
+		game:GetService("Debris"):AddItem(effect, 1)
+	end)
+	
+	-- Remover tool quando desequipado
+	tool.Unequipped:Connect(function()
+		task.wait(0.5)
+		if tool and tool.Parent then
+			tool:Destroy()
+			brainrotManager.TpToolActive = false
+		end
+	end)
+	
+	-- Auto-destruir após 60 segundos
+	task.delay(60, function()
+		if tool and tool.Parent then
+			tool:Destroy()
+			brainrotManager.TpToolActive = false
+		end
+	end)
+	
+	if statusLabel then
+		statusLabel.Text = "Tp Tool given! Equip from backpack."
+		statusLabel.TextColor3 = ColorPalette.Success
+		
+		task.delay(2, function()
+			if statusLabel then
+				statusLabel.TextColor3 = ColorPalette.Text
+			end
+		end)
+	end
+end
+
+-- Função para criar a interface
+local function createInterface()
+	-- Criar ScreenGui
+	screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "BrainrotManager"
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	screenGui.Parent = player.PlayerGui
+	
+	-- Frame principal
+	mainFrame = Instance.new("Frame")
+	mainFrame.Size = UDim2.new(0, 350, 0, 400)
+	mainFrame.Position = UDim2.new(0.5, -175, 0.5, -200)
+	mainFrame.BackgroundColor3 = ColorPalette.Primary
+	mainFrame.Parent = screenGui
+	
+	local mainCorner = Instance.new("UICorner")
+	mainCorner.CornerRadius = UDim.new(0, 12)
+	mainCorner.Parent = mainFrame
+	
+	local mainStroke = Instance.new("UIStroke")
+	mainStroke.Color = Color3.fromRGB(60, 60, 80)
+	mainStroke.Thickness = 3
+	mainStroke.Parent = mainFrame
+	
+	-- Barra de título
+	titleBar = Instance.new("Frame")
+	titleBar.Size = UDim2.new(1, 0, 0, 40)
+	titleBar.BackgroundColor3 = ColorPalette.Secondary
+	titleBar.Parent = mainFrame
+	
+	local titleCorner = Instance.new("UICorner")
+	titleCorner.CornerRadius = UDim.new(0, 12, 0, 0)
+	titleCorner.Parent = titleBar
+	
+	-- Título
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Text = "🧠 Brainrot Manager v2.0"
+	titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
+	titleLabel.Position = UDim2.new(0, 15, 0, 0)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.TextColor3 = ColorPalette.Text
+	titleLabel.TextSize = 18
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.Parent = titleBar
+	
+	-- Botões da barra de título
+	minimizeButton = Instance.new("TextButton")
+	minimizeButton.Text = "_"
+	minimizeButton.Size = UDim2.new(0, 30, 0, 30)
+	minimizeButton.Position = UDim2.new(0.7, 0, 0.5, -15)
+	minimizeButton.BackgroundColor3 = ColorPalette.Warning
+	minimizeButton.TextColor3 = ColorPalette.Text
+	minimizeButton.TextSize = 16
+	minimizeButton.Font = Enum.Font.GothamBold
+	minimizeButton.AutoButtonColor = false
+	minimizeButton.Parent = titleBar
+	
+	local minimizeCorner = Instance.new("UICorner")
+	minimizeCorner.CornerRadius = UDim.new(0, 6)
+	minimizeCorner.Parent = minimizeButton
+	
+	maximizeButton = Instance.new("TextButton")
+	maximizeButton.Text = "□"
+	maximizeButton.Size = UDim2.new(0, 30, 0, 30)
+	maximizeButton.Position = UDim2.new(0.8, 0, 0.5, -15)
+	maximizeButton.BackgroundColor3 = ColorPalette.Success
+	maximizeButton.TextColor3 = ColorPalette.Text
+	maximizeButton.TextSize = 14
+	maximizeButton.Font = Enum.Font.GothamBold
+	maximizeButton.AutoButtonColor = false
+	maximizeButton.Parent = titleBar
+	
+	local maximizeCorner = Instance.new("UICorner")
+	maximizeCorner.CornerRadius = UDim.new(0, 6)
+	maximizeCorner.Parent = maximizeButton
+	
+	closeButton = Instance.new("TextButton")
+	closeButton.Text = "X"
+	closeButton.Size = UDim2.new(0, 30, 0, 30)
+	closeButton.Position = UDim2.new(0.9, 0, 0.5, -15)
+	closeButton.BackgroundColor3 = ColorPalette.Danger
+	closeButton.TextColor3 = ColorPalette.Text
+	closeButton.TextSize = 14
+	closeButton.Font = Enum.Font.GothamBold
+	closeButton.AutoButtonColor = false
+	closeButton.Parent = titleBar
+	
+	local closeCorner = Instance.new("UICorner")
+	closeCorner.CornerRadius = UDim.new(0, 6)
+	closeCorner.Parent = closeButton
+	
+	-- Frame de conteúdo
+	contentFrame = Instance.new("Frame")
+	contentFrame.Size = UDim2.new(1, -20, 1, -60)
+	contentFrame.Position = UDim2.new(0, 10, 0, 50)
+	contentFrame.BackgroundTransparency = 1
+	contentFrame.Parent = mainFrame
+	
+	-- Botão View Brainrots
+	local viewButton = createButton(contentFrame, "🔍 View Brainrots", UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 10))
+	
+	-- Status label
+	statusLabel = createTextLabel(contentFrame, "Ready to scan Brainrots", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, 60), 12)
+	statusLabel.TextXAlignment = Enum.TextXAlignment.Center
+	
+	-- Botão Auto TP
+	toggleButton = createButton(contentFrame, "Start Auto TP", UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 90))
+	
+	-- Botão Tp Tool
+	tpToolButton = createButton(contentFrame, "🎯 Get Tp Tool", UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 140))
+	
+	-- Frame para a lista de brainrots (inicialmente invisível)
+	brainrotListFrame = Instance.new("Frame")
+	brainrotListFrame.Size = UDim2.new(0, 400, 0, 500)
+	brainrotListFrame.Position = UDim2.new(0.5, -200, 0.5, -250)
+	brainrotListFrame.BackgroundColor3 = ColorPalette.Primary
+	brainrotListFrame.Visible = false
+	brainrotListFrame.Parent = screenGui
+	
+	local listCorner = Instance.new("UICorner")
+	listCorner.CornerRadius = UDim.new(0, 12)
+	listCorner.Parent = brainrotListFrame
+	
+	local listStroke = Instance.new("UIStroke")
+	listStroke.Color = Color3.fromRGB(60, 60, 80)
+	listStroke.Thickness = 3
+	listStroke.Parent = brainrotListFrame
+	
+	-- Barra de título da lista
+	local listTitleBar = Instance.new("Frame")
+	listTitleBar.Size = UDim2.new(1, 0, 0, 40)
+	listTitleBar.BackgroundColor3 = ColorPalette.Secondary
+	listTitleBar.Parent = brainrotListFrame
+	
+	local listTitleCorner = Instance.new("UICorner")
+	listTitleCorner.CornerRadius = UDim.new(0, 12, 0, 0)
+	listTitleCorner.Parent = listTitleBar
+	
+	local listTitleLabel = Instance.new("TextLabel")
+	listTitleLabel.Text = "📁 Brainrots List"
+	listTitleLabel.Size = UDim2.new(0.8, 0, 1, 0)
+	listTitleLabel.Position = UDim2.new(0, 15, 0, 0)
+	listTitleLabel.BackgroundTransparency = 1
+	listTitleLabel.TextColor3 = ColorPalette.Text
+	listTitleLabel.TextSize = 18
+	listTitleLabel.Font = Enum.Font.GothamBold
+	listTitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	listTitleLabel.Parent = listTitleBar
+	
+	-- Botão fechar lista
+	local closeListButton = Instance.new("TextButton")
+	closeListButton.Text = "X"
+	closeListButton.Size = UDim2.new(0, 30, 0, 30)
+	closeListButton.Position = UDim2.new(0.92, 0, 0.5, -15)
+	closeListButton.BackgroundColor3 = ColorPalette.Danger
+	closeListButton.TextColor3 = ColorPalette.Text
+	closeListButton.TextSize = 14
+	closeListButton.Font = Enum.Font.GothamBold
+	closeListButton.AutoButtonColor = false
+	closeListButton.Parent = listTitleBar
+	
+	local closeListCorner = Instance.new("UICorner")
+	closeListCorner.CornerRadius = UDim.new(0, 6)
+	closeListCorner.Parent = closeListButton
+	
+	-- Barra de busca
+	local searchFrame = Instance.new("Frame")
+	searchFrame.Size = UDim2.new(1, -20, 0, 40)
+	searchFrame.Position = UDim2.new(0, 10, 0, 50)
+	searchFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+	searchFrame.Parent = brainrotListFrame
+	
+	local searchCorner = Instance.new("UICorner")
+	searchCorner.CornerRadius = UDim.new(0, 8)
+	searchCorner.Parent = searchFrame
+	
+	local searchIcon = Instance.new("TextLabel")
+	searchIcon.Text = "🔍"
+	searchIcon.Size = UDim2.new(0, 40, 1, 0)
+	searchIcon.Position = UDim2.new(0, 0, 0, 0)
+	searchIcon.BackgroundTransparency = 1
+	searchIcon.TextColor3 = ColorPalette.Text
+	searchIcon.TextSize = 18
+	searchIcon.Font = Enum.Font.Gotham
+	searchIcon.TextXAlignment = Enum.TextXAlignment.Center
+	searchIcon.Parent = searchFrame
+	
+	searchBox = Instance.new("TextBox")
+	searchBox.Size = UDim2.new(1, -50, 1, 0)
+	searchBox.Position = UDim2.new(0, 40, 0, 0)
+	searchBox.BackgroundTransparency = 1
+	searchBox.TextColor3 = ColorPalette.Text
+	searchBox.TextSize = 14
+	searchBox.Font = Enum.Font.Gotham
+	searchBox.PlaceholderText = "Search brainrots..."
+	searchBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 180)
+	searchBox.Text = ""
+	searchBox.Parent = searchFrame
+	
+	-- Lista de brainrots
+	brainrotListScrolling = Instance.new("ScrollingFrame")
+	brainrotListScrolling.Size = UDim2.new(1, -20, 1, -100)
+	brainrotListScrolling.Position = UDim2.new(0, 10, 0, 100)
+	brainrotListScrolling.BackgroundTransparency = 1
+	brainrotListScrolling.BorderSizePixel = 0
+	brainrotListScrolling.ScrollBarThickness = 6
+	brainrotListScrolling.ScrollBarImageColor3 = ColorPalette.Accent
+	brainrotListScrolling.Parent = brainrotListFrame
+	
+	-- Funções dos botões
+	
+	-- View Brainrots
+	viewButton.MouseButton1Click:Connect(function()
+		scanBrainrotModels()
+		
+		if #brainrotManager.BrainrotModels == 0 then
+			statusLabel.Text = "No brainrots folder found!"
+			statusLabel.TextColor3 = ColorPalette.Warning
+		else
+			brainrotListFrame.Visible = true
+			updateBrainrotList("")
+			statusLabel.Text = "Found " .. #brainrotManager.BrainrotModels .. " brainrots"
+			statusLabel.TextColor3 = ColorPalette.Success
+		end
+	end)
+	
+	-- Auto TP
+	toggleButton.MouseButton1Click:Connect(toggleAutoTeleport)
+	
+	-- Tp Tool
+	tpToolButton.MouseButton1Click:Connect(createTpTool)
+	
+	-- Fechar lista
+	closeListButton.MouseButton1Click:Connect(function()
+		brainrotListFrame.Visible = false
+	end)
+	
+	-- Busca em tempo real
+	searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+		updateBrainrotList(searchBox.Text)
+	end)
+	
+	-- Minimizar
+	minimizeButton.MouseButton1Click:Connect(function()
+		if not brainrotManager.IsMinimized then
+			contentFrame.Visible = false
+			mainFrame.Size = UDim2.new(0, 350, 0, 40)
+			minimizeButton.Text = "□"
+			brainrotManager.IsMinimized = true
+		end
+	end)
+	
+	-- Maximizar
+	maximizeButton.MouseButton1Click:Connect(function()
+		if brainrotManager.IsMinimized then
+			contentFrame.Visible = true
+			mainFrame.Size = UDim2.new(0, 350, 0, 400)
+			minimizeButton.Text = "_"
+			brainrotManager.IsMinimized = false
+		end
+	end)
+	
+	-- Fechar
+	closeButton.MouseButton1Click:Connect(function()
+		-- Parar todas as funcionalidades
+		brainrotManager.Enabled = false
+		brainrotManager.TpToolActive = false
+		
+		-- Remover interface
+		screenGui:Destroy()
+		
+		-- Voltar ao spawn
+		character = player.Character or player.CharacterAdded:Wait()
+		if character and character:FindFirstChild("HumanoidRootPart") then
+			local spawnLocation = Workspace:FindFirstChild("SpawnLocation")
+			if spawnLocation then
+				character.HumanoidRootPart.CFrame = spawnLocation.CFrame + Vector3.new(0, 3, 0)
+			end
+		end
+	end)
+	
+	-- Arrastar a janela
+	local dragging = false
+	local dragInput, dragStart, startPos
+	
+	titleBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			dragStart = input.Position
+			startPos = mainFrame.Position
+			
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+	
+	titleBar.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			dragInput = input
+		end
+	end)
+	
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and input == dragInput then
+			local delta = input.Position - dragStart
+			mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+	
+	-- Arrastar a lista também
+	local listDragging = false
+	local listDragInput, listDragStart, listStartPos
+	
+	listTitleBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			listDragging = true
+			listDragStart = input.Position
+			listStartPos = brainrotListFrame.Position
+			
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					listDragging = false
+				end
+			end)
+		end
+	end)
+	
+	listTitleBar.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			listDragInput = input
+		end
+	end)
+	
+	UserInputService.InputChanged:Connect(function(input)
+		if listDragging and input == listDragInput then
+			local delta = input.Position - listDragStart
+			brainrotListFrame.Position = UDim2.new(listStartPos.X.Scale, listStartPos.X.Offset + delta.X, listStartPos.Y.Scale, listStartPos.Y.Offset + delta.Y)
+		end
+	end)
+	
+	-- Escanear periodicamente
+	spawn(function()
+		while screenGui and screenGui.Parent do
+			scanBrainrotModels()
+			task.wait(SCAN_INTERVAL)
+		end
+	end)
+	
+	-- Notificação inicial
+	StarterGui:SetCore("SendNotification", {
+		Title = "Brainrot Manager",
+		Text = "Interface loaded successfully!",
+		Duration = 3,
+		Icon = "rbxassetid://6724771532"
+	})
+end
+
+-- Inicializar quando o personagem spawnar
+player.CharacterAdded:Connect(function(char)
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+end)
+
+-- Criar a interface
+createInterface()
+
+-- Exibir mensagem no console
+print("Brainrot Manager v2.0 loaded successfully!")
+print("Looking for '" .. BRAINROTS_FOLDER_NAME .. "' folder in workspace...")
+
+-- Auto-scan inicial
+task.delay(1, function()
+	scanBrainrotModels()
+	if brainrotManager.BrainrotFolder then
+		print("Found brainrot folder with " .. #brainrotManager.BrainrotModels .. " items")
+	else
+		print("Brainrot folder not found. Make sure to create a folder named '" .. BRAINROTS_FOLDER_NAME .. "' in workspace.")
+	end
+end)
