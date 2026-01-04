@@ -1,0 +1,906 @@
+-- Brainrots Explorer || By Branz
+-- Sistema GUI Avançado com Loading Screen
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+-- Variáveis globais
+local autoTpEnabled = false
+local autoTpConnection
+local brainrotsFolder
+local spawnPosition
+local listGui
+
+-- Função para criar a tela de carregamento
+local function createLoadingScreen()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "LoadingScreen"
+    screenGui.ResetOnSpawn = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent = playerGui
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+    frame.BorderSizePixel = 0
+    frame.Parent = screenGui
+
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 15, 35)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(15, 10, 25)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 20))
+    }
+    gradient.Rotation = 90
+    gradient.Parent = frame
+
+    -- Partículas decorativas
+    for i = 1, 20 do
+        local particle = Instance.new("Frame")
+        particle.Size = UDim2.new(0, math.random(2, 4), 0, math.random(2, 4))
+        particle.Position = UDim2.new(math.random(), 0, math.random(), 0)
+        particle.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
+        particle.BorderSizePixel = 0
+        particle.BackgroundTransparency = math.random(50, 80) / 100
+        particle.Parent = frame
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(1, 0)
+        corner.Parent = particle
+        
+        TweenService:Create(particle, TweenInfo.new(math.random(2, 4), Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, true), {
+            Position = UDim2.new(math.random(), 0, math.random(), 0)
+        }):Play()
+    end
+
+    local iconFrame = Instance.new("Frame")
+    iconFrame.Size = UDim2.new(0, 120, 0, 120)
+    iconFrame.Position = UDim2.new(0.5, 0, 0.3, 0)
+    iconFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    iconFrame.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+    iconFrame.BorderSizePixel = 0
+    iconFrame.Rotation = 0
+    iconFrame.Parent = frame
+
+    local iconCorner = Instance.new("UICorner")
+    iconCorner.CornerRadius = UDim.new(0.3, 0)
+    iconCorner.Parent = iconFrame
+
+    local iconGradient = Instance.new("UIGradient")
+    iconGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(100, 150, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 100, 255))
+    }
+    iconGradient.Rotation = 45
+    iconGradient.Parent = iconFrame
+
+    TweenService:Create(iconFrame, TweenInfo.new(2, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1), {Rotation = 360}):Play()
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(0, 500, 0, 80)
+    title.Position = UDim2.new(0.5, 0, 0.48, 0)
+    title.AnchorPoint = Vector2.new(0.5, 0.5)
+    title.BackgroundTransparency = 1
+    title.Text = "BRAINROTS EXPLORER"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 42
+    title.TextTransparency = 1
+    title.Parent = frame
+
+    local subtitle = Instance.new("TextLabel")
+    subtitle.Size = UDim2.new(0, 400, 0, 40)
+    subtitle.Position = UDim2.new(0.5, 0, 0.56, 0)
+    subtitle.AnchorPoint = Vector2.new(0.5, 0.5)
+    subtitle.BackgroundTransparency = 1
+    subtitle.Text = "Powered by Branz"
+    subtitle.TextColor3 = Color3.fromRGB(150, 180, 255)
+    subtitle.Font = Enum.Font.GothamMedium
+    subtitle.TextSize = 18
+    subtitle.TextTransparency = 1
+    subtitle.Parent = frame
+
+    local loadingBar = Instance.new("Frame")
+    loadingBar.Size = UDim2.new(0, 450, 0, 8)
+    loadingBar.Position = UDim2.new(0.5, 0, 0.68, 0)
+    loadingBar.AnchorPoint = Vector2.new(0.5, 0.5)
+    loadingBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    loadingBar.BorderSizePixel = 0
+    loadingBar.Parent = frame
+
+    local loadingBarFill = Instance.new("Frame")
+    loadingBarFill.Size = UDim2.new(0, 0, 1, 0)
+    loadingBarFill.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
+    loadingBarFill.BorderSizePixel = 0
+    loadingBarFill.Parent = loadingBar
+
+    local barGradient = Instance.new("UIGradient")
+    barGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(80, 120, 255)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(120, 150, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 100, 255))
+    }
+    barGradient.Parent = loadingBarFill
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = loadingBar
+
+    local corner2 = Instance.new("UICorner")
+    corner2.CornerRadius = UDim.new(1, 0)
+    corner2.Parent = loadingBarFill
+
+    local loadingText = Instance.new("TextLabel")
+    loadingText.Size = UDim2.new(0, 450, 0, 30)
+    loadingText.Position = UDim2.new(0.5, 0, 0.74, 0)
+    loadingText.AnchorPoint = Vector2.new(0.5, 0.5)
+    loadingText.BackgroundTransparency = 1
+    loadingText.Text = "Inicializando sistema... 0%"
+    loadingText.TextColor3 = Color3.fromRGB(200, 200, 220)
+    loadingText.Font = Enum.Font.Gotham
+    loadingText.TextSize = 16
+    loadingText.TextTransparency = 1
+    loadingText.Parent = frame
+
+    -- Animações de entrada
+    wait(0.3)
+    TweenService:Create(title, TweenInfo.new(1, Enum.EasingStyle.Expo, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
+    TweenService:Create(subtitle, TweenInfo.new(1, Enum.EasingStyle.Expo, Enum.EasingDirection.Out, 0, false, 0.2), {TextTransparency = 0}):Play()
+    TweenService:Create(loadingText, TweenInfo.new(1, Enum.EasingStyle.Expo, Enum.EasingDirection.Out, 0, false, 0.4), {TextTransparency = 0}):Play()
+
+    -- Simular carregamento
+    local stages = {
+        {0, 20, "Procurando pasta Brainrots..."},
+        {20, 40, "Carregando modelos..."},
+        {40, 65, "Inicializando sistemas..."},
+        {65, 85, "Configurando interface..."},
+        {85, 100, "Finalizando..."}
+    }
+
+    for _, stage in ipairs(stages) do
+        for i = stage[1], stage[2], 2 do
+            wait(0.04)
+            loadingBarFill.Size = UDim2.new(i / 100, 0, 1, 0)
+            loadingText.Text = stage[3] .. " " .. i .. "%"
+        end
+    end
+
+    wait(0.6)
+    local fadeOut = TweenService:Create(frame, TweenInfo.new(0.8, Enum.EasingStyle.Expo, Enum.EasingDirection.In), {BackgroundTransparency = 1})
+    TweenService:Create(title, TweenInfo.new(0.8), {TextTransparency = 1}):Play()
+    TweenService:Create(subtitle, TweenInfo.new(0.8), {TextTransparency = 1}):Play()
+    TweenService:Create(loadingText, TweenInfo.new(0.8), {TextTransparency = 1}):Play()
+    TweenService:Create(loadingBar, TweenInfo.new(0.8), {BackgroundTransparency = 1}):Play()
+    TweenService:Create(loadingBarFill, TweenInfo.new(0.8), {BackgroundTransparency = 1}):Play()
+    TweenService:Create(iconFrame, TweenInfo.new(0.8), {BackgroundTransparency = 1}):Play()
+    fadeOut:Play()
+    
+    for _, particle in pairs(frame:GetChildren()) do
+        if particle:IsA("Frame") and particle ~= loadingBar and particle ~= iconFrame then
+            TweenService:Create(particle, TweenInfo.new(0.8), {BackgroundTransparency = 1}):Play()
+        end
+    end
+    
+    fadeOut.Completed:Wait()
+    screenGui:Destroy()
+end
+
+-- Função para criar a lista de Brainrots
+local function createListGui()
+    local listScreenGui = Instance.new("ScreenGui")
+    listScreenGui.Name = "BrainrotsList"
+    listScreenGui.ResetOnSpawn = false
+    listScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    listScreenGui.Enabled = false
+    listScreenGui.Parent = playerGui
+
+    local listFrame = Instance.new("Frame")
+    listFrame.Name = "ListFrame"
+    listFrame.Size = UDim2.new(0, 320, 0, 450)
+    listFrame.Position = UDim2.new(0.5, -450, 0.5, -225)
+    listFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+    listFrame.BorderSizePixel = 0
+    listFrame.Parent = listScreenGui
+
+    local listCorner = Instance.new("UICorner")
+    listCorner.CornerRadius = UDim.new(0, 12)
+    listCorner.Parent = listFrame
+
+    local listGradient = Instance.new("UIGradient")
+    listGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 25, 40)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 25))
+    }
+    listGradient.Rotation = 135
+    listGradient.Parent = listFrame
+
+    local listTitle = Instance.new("TextLabel")
+    listTitle.Size = UDim2.new(1, -20, 0, 40)
+    listTitle.Position = UDim2.new(0, 10, 0, 10)
+    listTitle.BackgroundTransparency = 1
+    listTitle.Text = "📋 Brainrots Disponíveis"
+    listTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    listTitle.Font = Enum.Font.GothamBold
+    listTitle.TextSize = 18
+    listTitle.TextXAlignment = Enum.TextXAlignment.Left
+    listTitle.Parent = listFrame
+
+    local searchFrame = Instance.new("Frame")
+    searchFrame.Size = UDim2.new(1, -20, 0, 38)
+    searchFrame.Position = UDim2.new(0, 10, 0, 55)
+    searchFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    searchFrame.BorderSizePixel = 0
+    searchFrame.Parent = listFrame
+
+    local searchCorner = Instance.new("UICorner")
+    searchCorner.CornerRadius = UDim.new(0, 8)
+    searchCorner.Parent = searchFrame
+
+    local searchIcon = Instance.new("TextLabel")
+    searchIcon.Size = UDim2.new(0, 30, 1, 0)
+    searchIcon.BackgroundTransparency = 1
+    searchIcon.Text = "🔍"
+    searchIcon.TextSize = 18
+    searchIcon.Parent = searchFrame
+
+    local searchBox = Instance.new("TextBox")
+    searchBox.Size = UDim2.new(1, -35, 1, 0)
+    searchBox.Position = UDim2.new(0, 35, 0, 0)
+    searchBox.BackgroundTransparency = 1
+    searchBox.PlaceholderText = "Pesquisar Brainrot..."
+    searchBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 120)
+    searchBox.Text = ""
+    searchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    searchBox.Font = Enum.Font.Gotham
+    searchBox.TextSize = 14
+    searchBox.TextXAlignment = Enum.TextXAlignment.Left
+    searchBox.ClearTextOnFocus = false
+    searchBox.Parent = searchFrame
+
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Size = UDim2.new(1, -20, 1, -110)
+    scrollFrame.Position = UDim2.new(0, 10, 0, 100)
+    scrollFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    scrollFrame.BorderSizePixel = 0
+    scrollFrame.ScrollBarThickness = 6
+    scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scrollFrame.Parent = listFrame
+
+    local scrollCorner = Instance.new("UICorner")
+    scrollCorner.CornerRadius = UDim.new(0, 8)
+    scrollCorner.Parent = scrollFrame
+
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.SortOrder = Enum.SortOrder.Name
+    listLayout.Padding = UDim.new(0, 5)
+    listLayout.Parent = scrollFrame
+
+    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+    end)
+
+    -- Função para atualizar a lista
+    local function updateList(searchTerm)
+        for _, child in pairs(scrollFrame:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
+
+        if not brainrotsFolder then return end
+
+        local items = brainrotsFolder:GetChildren()
+        table.sort(items, function(a, b)
+            return a.Name:lower() < b.Name:lower()
+        end)
+
+        for _, item in ipairs(items) do
+            if searchTerm == "" or item.Name:lower():find(searchTerm:lower(), 1, true) then
+                local itemButton = Instance.new("TextButton")
+                itemButton.Size = UDim2.new(1, -10, 0, 36)
+                itemButton.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+                itemButton.Text = ""
+                itemButton.AutoButtonColor = false
+                itemButton.Parent = scrollFrame
+
+                local itemCorner = Instance.new("UICorner")
+                itemCorner.CornerRadius = UDim.new(0, 6)
+                itemCorner.Parent = itemButton
+
+                local itemLabel = Instance.new("TextLabel")
+                itemLabel.Size = UDim2.new(1, -15, 1, 0)
+                itemLabel.Position = UDim2.new(0, 10, 0, 0)
+                itemLabel.BackgroundTransparency = 1
+                itemLabel.Text = "📦 " .. item.Name
+                itemLabel.TextColor3 = Color3.fromRGB(220, 220, 240)
+                itemLabel.Font = Enum.Font.Gotham
+                itemLabel.TextSize = 14
+                itemLabel.TextXAlignment = Enum.TextXAlignment.Left
+                itemLabel.TextTruncate = Enum.TextTruncate.AtEnd
+                itemLabel.Parent = itemButton
+
+                itemButton.MouseButton1Click:Connect(function()
+                    if item:IsA("Model") and item.PrimaryPart then
+                        character = player.Character
+                        if character and character:FindFirstChild("HumanoidRootPart") then
+                            character.HumanoidRootPart.CFrame = item.PrimaryPart.CFrame + Vector3.new(0, 5, 0)
+                        end
+                    elseif item:FindFirstChildWhichIsA("BasePart") then
+                        local part = item:FindFirstChildWhichIsA("BasePart")
+                        character = player.Character
+                        if character and character:FindFirstChild("HumanoidRootPart") then
+                            character.HumanoidRootPart.CFrame = part.CFrame + Vector3.new(0, 5, 0)
+                        end
+                    end
+                end)
+
+                itemButton.MouseEnter:Connect(function()
+                    TweenService:Create(itemButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 70, 120)}):Play()
+                end)
+
+                itemButton.MouseLeave:Connect(function()
+                    TweenService:Create(itemButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(35, 35, 50)}):Play()
+                end)
+            end
+        end
+    end
+
+    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        updateList(searchBox.Text)
+    end)
+
+    updateList("")
+
+    -- Sistema de arrastar
+    local dragging = false
+    local dragInput, dragStart, startPos
+
+    listTitle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = listFrame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            listFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    return listScreenGui
+end
+
+-- Função para Auto TP
+local function toggleAutoTp(enabled)
+    autoTpEnabled = enabled
+    
+    if autoTpConnection then
+        autoTpConnection:Disconnect()
+        autoTpConnection = nil
+    end
+    
+    if enabled and brainrotsFolder then
+        local items = brainrotsFolder:GetChildren()
+        local currentIndex = 1
+        
+        autoTpConnection = RunService.Heartbeat:Connect(function()
+            wait(1.6)
+            
+            if not autoTpEnabled then
+                if autoTpConnection then
+                    autoTpConnection:Disconnect()
+                    autoTpConnection = nil
+                end
+                return
+            end
+            
+            character = player.Character
+            if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+            
+            if #items == 0 then return end
+            
+            local item = items[currentIndex]
+            
+            if item then
+                if item:IsA("Model") and item.PrimaryPart then
+                    character.HumanoidRootPart.CFrame = item.PrimaryPart.CFrame + Vector3.new(0, 5, 0)
+                elseif item:FindFirstChildWhichIsA("BasePart") then
+                    local part = item:FindFirstChildWhichIsA("BasePart")
+                    character.HumanoidRootPart.CFrame = part.CFrame + Vector3.new(0, 5, 0)
+                end
+            end
+            
+            currentIndex = currentIndex + 1
+            if currentIndex > #items then
+                currentIndex = 1
+            end
+        end)
+    else
+        if spawnPosition then
+            character = player.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                character.HumanoidRootPart.CFrame = spawnPosition
+            end
+        end
+    end
+end
+
+-- Função para criar TP Tool
+local function createTpTool()
+    local existingTool = player.Backpack:FindFirstChild("TP Tool") or (character and character:FindFirstChild("TP Tool"))
+    if existingTool then
+        existingTool:Destroy()
+        return
+    end
+
+    local tool = Instance.new("Tool")
+    tool.Name = "TP Tool"
+    tool.RequiresHandle = true
+    tool.CanBeDropped = false
+
+    local handle = Instance.new("Part")
+    handle.Name = "Handle"
+    handle.Size = Vector3.new(1, 1, 1)
+    handle.BrickColor = BrickColor.new("Bright blue")
+    handle.Material = Enum.Material.Neon
+    handle.CanCollide = false
+    handle.Parent = tool
+
+    local mesh = Instance.new("SpecialMesh")
+    mesh.MeshType = Enum.MeshType.Sphere
+    mesh.Scale = Vector3.new(0.8, 0.8, 0.8)
+    mesh.Parent = handle
+
+    -- Efeito RGB
+    RunService.RenderStepped:Connect(function()
+        if handle and handle.Parent then
+            local hue = tick() % 5 / 5
+            handle.BrickColor = BrickColor.new(Color3.fromHSV(hue, 1, 1))
+        end
+    end)
+
+    tool.Activated:Connect(function()
+        local mouse = player:GetMouse()
+        if mouse.Target then
+            character = player.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                character.HumanoidRootPart.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
+            end
+        end
+    end)
+
+    tool.Parent = player.Backpack
+end
+
+-- Criar GUI principal
+local function createMainGUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "BrainrotsGUI"
+    screenGui.ResetOnSpawn = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent = playerGui
+
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 380, 0, 240)
+    mainFrame.Position = UDim2.new(0.5, -190, 0.5, -120)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = screenGui
+
+    local mainCorner = Instance.new("UICorner")
+    mainCorner.CornerRadius = UDim.new(0, 14)
+    mainCorner.Parent = mainFrame
+
+    local mainGradient = Instance.new("UIGradient")
+    mainGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 25, 40)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 25))
+    }
+    mainGradient.Rotation = 135
+    mainGradient.Parent = mainFrame
+
+    -- Borda brilhante
+    local border = Instance.new("UIStroke")
+    border.Color = Color3.fromRGB(80, 120, 255)
+    border.Thickness = 2
+    border.Transparency = 0.7
+    border.Parent = mainFrame
+
+    local titleBar = Instance.new("Frame")
+    titleBar.Name = "TitleBar"
+    titleBar.Size = UDim2.new(1, 0, 0, 45)
+    titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = mainFrame
+
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 14)
+    titleCorner.Parent = titleBar
+
+    local titleBarBottom = Instance.new("Frame")
+    titleBarBottom.Size = UDim2.new(1, 0, 0, 14)
+    titleBarBottom.Position = UDim2.new(0, 0, 1, -14)
+    titleBarBottom.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+    titleBarBottom.BorderSizePixel = 0
+    titleBarBottom.Parent = titleBar
+
+    local titleGradient = Instance.new("UIGradient")
+    titleGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(40, 40, 60)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(30, 30, 50))
+    }
+    titleGradient.Rotation = 90
+    titleGradient.Parent = titleBar
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -90, 1, 0)
+    title.Position = UDim2.new(0, 15, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "🧠 Brainrots Explorer"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 18
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = titleBar
+
+    local minimizeButton = Instance.new("TextButton")
+    minimizeButton.Name = "MinimizeButton"
+    minimizeButton.Size = UDim2.new(0, 32, 0, 32)
+    minimizeButton.Position = UDim2.new(1, -75, 0.5, -16)
+    minimizeButton.BackgroundColor3 = Color3.fromRGB(50, 70, 120)
+    minimizeButton.Text = "−"
+    minimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    minimizeButton.Font = Enum.Font.GothamBold
+    minimizeButton.TextSize = 20
+    minimizeButton.Parent = titleBar
+
+    local minCorner = Instance.new("UICorner")
+    minCorner.CornerRadius = UDim.new(0, 8)
+    minCorner.Parent = minimizeButton
+
+    local closeButton = Instance.new("TextButton")
+    closeButton.Size = UDim2.new(0, 32, 0, 32)
+    closeButton.Position = UDim2.new(1, -38, 0.5, -16)
+    closeButton.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+    closeButton.Text = "✕"
+    closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.TextSize = 18
+    closeButton.Parent = titleBar
+
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 8)
+    closeCorner.Parent = closeButton
+
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Name = "ContentFrame"
+    contentFrame.Size = UDim2.new(1, -30, 1, -65)
+    contentFrame.Position = UDim2.new(0, 15, 0, 55)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = mainFrame
+
+    -- View Brainrots Button
+    local viewButton = Instance.new("TextButton")
+    viewButton.Size = UDim2.new(1, 0, 0, 45)
+    viewButton.Position = UDim2.new(0, 0, 0, 0)
+    viewButton.BackgroundColor3 = Color3.fromRGB(40, 45, 65)
+    viewButton.Text = ""
+    viewButton.AutoButtonColor = false
+    viewButton.Parent = contentFrame
+
+    local viewCorner = Instance.new("UICorner")
+    viewCorner.CornerRadius = UDim.new(0, 10)
+    viewCorner.Parent = viewButton
+
+    local viewStroke = Instance.new("UIStroke")
+    viewStroke.Color = Color3.fromRGB(60, 80, 140)
+    viewStroke.Thickness = 1.5
+    viewStroke.Transparency = 0.5
+    viewStroke.Parent = viewButton
+
+    local viewIcon = Instance.new("TextLabel")
+    viewIcon.Size = UDim2.new(0, 35, 0, 35)
+    viewIcon.Position = UDim2.new(0, 10, 0.5, -17.5)
+    viewIcon.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+    viewIcon.Text = "📋"
+    viewIcon.TextSize = 20
+    viewIcon.Font = Enum.Font.GothamBold
+    viewIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    viewIcon.Parent = viewButton
+
+    local viewIconCorner = Instance.new("UICorner")
+    viewIconCorner.CornerRadius = UDim.new(0, 8)
+    viewIconCorner.Parent = viewIcon
+
+    local viewLabel = Instance.new("TextLabel")
+    viewLabel.Size = UDim2.new(1, -60, 1, 0)
+    viewLabel.Position = UDim2.new(0, 55, 0, 0)
+    viewLabel.BackgroundTransparency = 1
+    viewLabel.Text = "View Brainrots"
+    viewLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    viewLabel.Font = Enum.Font.GothamBold
+    viewLabel.TextSize = 16
+    viewLabel.TextXAlignment = Enum.TextXAlignment.Left
+    viewLabel.Parent = viewButton
+
+    -- Auto TP Button
+    local autoTpButton = Instance.new("TextButton")
+    autoTpButton.Size = UDim2.new(1, 0, 0, 45)
+    autoTpButton.Position = UDim2.new(0, 0, 0, 55)
+    autoTpButton.BackgroundColor3 = Color3.fromRGB(40, 45, 65)
+    autoTpButton.Text = ""
+    autoTpButton.AutoButtonColor = false
+    autoTpButton.Parent = contentFrame
+
+    local autoCorner = Instance.new("UICorner")
+    autoCorner.CornerRadius = UDim.new(0, 10)
+    autoCorner.Parent = autoTpButton
+
+    local autoStroke = Instance.new("UIStroke")
+    autoStroke.Color = Color3.fromRGB(60, 80, 140)
+    autoStroke.Thickness = 1.5
+    autoStroke.Transparency = 0.5
+    autoStroke.Parent = autoTpButton
+
+    local autoIcon = Instance.new("TextLabel")
+    autoIcon.Size = UDim2.new(0, 35, 0, 35)
+    autoIcon.Position = UDim2.new(0, 10, 0.5, -17.5)
+    autoIcon.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+    autoIcon.Text = "🚀"
+    autoIcon.TextSize = 20
+    autoIcon.Font = Enum.Font.GothamBold
+    autoIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    autoIcon.Parent = autoTpButton
+
+    local autoIconCorner = Instance.new("UICorner")
+    autoIconCorner.CornerRadius = UDim.new(0, 8)
+    autoIconCorner.Parent = autoIcon
+
+    local autoLabel = Instance.new("TextLabel")
+    autoLabel.Size = UDim2.new(1, -115, 1, 0)
+    autoLabel.Position = UDim2.new(0, 55, 0, 0)
+    autoLabel.BackgroundTransparency = 1
+    autoLabel.Text = "Auto TP Brainrots"
+    autoLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    autoLabel.Font = Enum.Font.GothamBold
+    autoLabel.TextSize = 16
+    autoLabel.TextXAlignment = Enum.TextXAlignment.Left
+    autoLabel.Parent = autoTpButton
+
+    local autoToggle = Instance.new("Frame")
+    autoToggle.Name = "Toggle"
+    autoToggle.Size = UDim2.new(0, 50, 0, 28)
+    autoToggle.Position = UDim2.new(1, -60, 0.5, -14)
+    autoToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+    autoToggle.Parent = autoTpButton
+
+    local autoToggleCorner = Instance.new("UICorner")
+    autoToggleCorner.CornerRadius = UDim.new(1, 0)
+    autoToggleCorner.Parent = autoToggle
+
+    local autoCircle = Instance.new("Frame")
+    autoCircle.Size = UDim2.new(0, 22, 0, 22)
+    autoCircle.Position = UDim2.new(0, 3, 0.5, -11)
+    autoCircle.BackgroundColor3 = Color3.fromRGB(220, 220, 240)
+    autoCircle.Parent = autoToggle
+
+    local autoCircleCorner = Instance.new("UICorner")
+    autoCircleCorner.CornerRadius = UDim.new(1, 0)
+    autoCircleCorner.Parent = autoCircle
+
+    -- TP Tool Button
+    local tpToolButton = Instance.new("TextButton")
+    tpToolButton.Size = UDim2.new(1, 0, 0, 45)
+    tpToolButton.Position = UDim2.new(0, 0, 0, 110)
+    tpToolButton.BackgroundColor3 = Color3.fromRGB(40, 45, 65)
+    tpToolButton.Text = ""
+    tpToolButton.AutoButtonColor = false
+    tpToolButton.Parent = contentFrame
+
+    local toolCorner = Instance.new("UICorner")
+    toolCorner.CornerRadius = UDim.new(0, 10)
+    toolCorner.Parent = tpToolButton
+
+    local toolStroke = Instance.new("UIStroke")
+    toolStroke.Color = Color3.fromRGB(60, 80, 140)
+    toolStroke.Thickness = 1.5
+    toolStroke.Transparency = 0.5
+    toolStroke.Parent = tpToolButton
+
+    local toolIcon = Instance.new("TextLabel")
+    toolIcon.Size = UDim2.new(0, 35, 0, 35)
+    toolIcon.Position = UDim2.new(0, 10, 0.5, -17.5)
+    toolIcon.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+    toolIcon.Text = "👁️"
+    toolIcon.TextSize = 20
+    toolIcon.Font = Enum.Font.GothamBold
+    toolIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toolIcon.Parent = tpToolButton
+
+    local toolIconCorner = Instance.new("UICorner")
+    toolIconCorner.CornerRadius = UDim.new(0, 8)
+    toolIconCorner.Parent = toolIcon
+
+    local toolLabel = Instance.new("TextLabel")
+    toolLabel.Size = UDim2.new(1, -60, 1, 0)
+    toolLabel.Position = UDim2.new(0, 55, 0, 0)
+    toolLabel.BackgroundTransparency = 1
+    toolLabel.Text = "TP Tool"
+    toolLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toolLabel.Font = Enum.Font.GothamBold
+    toolLabel.TextSize = 16
+    toolLabel.TextXAlignment = Enum.TextXAlignment.Left
+    toolLabel.Parent = tpToolButton
+
+    -- Sistema de arrastar
+    local dragging = false
+    local dragInput, dragStart, startPos
+
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    -- Funcionalidade dos botões
+    local isMinimized = false
+    
+    minimizeButton.MouseButton1Click:Connect(function()
+        isMinimized = not isMinimized
+        if isMinimized then
+            TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Expo), {Size = UDim2.new(0, 380, 0, 45)}):Play()
+            contentFrame.Visible = false
+            minimizeButton.Text = "+"
+        else
+            TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Expo), {Size = UDim2.new(0, 380, 0, 240)}):Play()
+            contentFrame.Visible = true
+            minimizeButton.Text = "−"
+        end
+    end)
+
+    closeButton.MouseButton1Click:Connect(function()
+        screenGui:Destroy()
+        if listGui then
+            listGui:Destroy()
+        end
+    end)
+
+    -- View Brainrots
+    viewButton.MouseButton1Click:Connect(function()
+        if listGui then
+            listGui.Enabled = not listGui.Enabled
+        end
+    end)
+
+    viewButton.MouseEnter:Connect(function()
+        TweenService:Create(viewButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 60, 90)}):Play()
+        TweenService:Create(viewStroke, TweenInfo.new(0.2), {Transparency = 0.2}):Play()
+    end)
+
+    viewButton.MouseLeave:Connect(function()
+        TweenService:Create(viewButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(40, 45, 65)}):Play()
+        TweenService:Create(viewStroke, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
+    end)
+
+    -- Auto TP
+    autoTpButton.MouseButton1Click:Connect(function()
+        autoTpEnabled = not autoTpEnabled
+        toggleAutoTp(autoTpEnabled)
+        
+        if autoTpEnabled then
+            TweenService:Create(autoToggle, TweenInfo.new(0.3, Enum.EasingStyle.Expo), {BackgroundColor3 = Color3.fromRGB(80, 200, 120)}):Play()
+            TweenService:Create(autoCircle, TweenInfo.new(0.3, Enum.EasingStyle.Expo), {Position = UDim2.new(0, 25, 0.5, -11)}):Play()
+            TweenService:Create(autoIcon, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(80, 200, 120)}):Play()
+        else
+            TweenService:Create(autoToggle, TweenInfo.new(0.3, Enum.EasingStyle.Expo), {BackgroundColor3 = Color3.fromRGB(50, 50, 70)}):Play()
+            TweenService:Create(autoCircle, TweenInfo.new(0.3, Enum.EasingStyle.Expo), {Position = UDim2.new(0, 3, 0.5, -11)}):Play()
+            TweenService:Create(autoIcon, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(80, 120, 255)}):Play()
+        end
+    end)
+
+    autoTpButton.MouseEnter:Connect(function()
+        TweenService:Create(autoTpButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 60, 90)}):Play()
+        TweenService:Create(autoStroke, TweenInfo.new(0.2), {Transparency = 0.2}):Play()
+    end)
+
+    autoTpButton.MouseLeave:Connect(function()
+        TweenService:Create(autoTpButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(40, 45, 65)}):Play()
+        TweenService:Create(autoStroke, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
+    end)
+
+    -- TP Tool
+    tpToolButton.MouseButton1Click:Connect(function()
+        createTpTool()
+    end)
+
+    tpToolButton.MouseEnter:Connect(function()
+        TweenService:Create(tpToolButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 60, 90)}):Play()
+        TweenService:Create(toolStroke, TweenInfo.new(0.2), {Transparency = 0.2}):Play()
+    end)
+
+    tpToolButton.MouseLeave:Connect(function()
+        TweenService:Create(tpToolButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(40, 45, 65)}):Play()
+        TweenService:Create(toolStroke, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
+    end)
+
+    -- Efeito hover nos botões de controle
+    minimizeButton.MouseEnter:Connect(function()
+        TweenService:Create(minimizeButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(70, 90, 150)}):Play()
+    end)
+
+    minimizeButton.MouseLeave:Connect(function()
+        TweenService:Create(minimizeButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 70, 120)}):Play()
+    end)
+
+    closeButton.MouseEnter:Connect(function()
+        TweenService:Create(closeButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 80, 80)}):Play()
+    end)
+
+    closeButton.MouseLeave:Connect(function()
+        TweenService:Create(closeButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(220, 60, 60)}):Play()
+    end)
+end
+
+-- Inicializar script
+local function initialize()
+    -- Procurar pasta Brainrots
+    brainrotsFolder = Workspace:FindFirstChild("Brainrots")
+    
+    if not brainrotsFolder then
+        warn("⚠️ Pasta 'Brainrots' não encontrada no Workspace!")
+    end
+    
+    -- Salvar posição de spawn
+    if character and character:FindFirstChild("HumanoidRootPart") then
+        spawnPosition = character.HumanoidRootPart.CFrame
+    end
+    
+    player.CharacterAdded:Connect(function(char)
+        character = char
+        humanoidRootPart = char:WaitForChild("HumanoidRootPart")
+        if not spawnPosition then
+            spawnPosition = humanoidRootPart.CFrame
+        end
+    end)
+end
+
+-- Executar script
+initialize()
+createLoadingScreen()
+wait(4.2)
+listGui = createListGui()
+createMainGUI()
