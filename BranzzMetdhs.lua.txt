@@ -1,0 +1,695 @@
+-- Serviços
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+-- Player
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+
+-- Variáveis globais
+local guiEnabled = true
+local savedPosition = nil
+local flightEnabled = false
+local flightConnection = nil
+local desyncV1Enabled = false
+local desyncV2Enabled = false
+local hitboxEnabled = false
+local currentHitbox = nil
+local platformParts = {}
+local minimizado = false
+
+-- Criação da GUI principal
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "PVPTrainerGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = player.PlayerGui
+
+-- Frame principal (arrastável)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 350, 0, 450)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -225)
+MainFrame.BackgroundColor3 = Color3.fromRGB(45, 0, 65)
+MainFrame.BorderColor3 = Color3.fromRGB(100, 0, 150)
+MainFrame.BorderSizePixel = 2
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+-- Título da GUI (também arrastável)
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Size = UDim2.new(1, 0, 0, 30)
+TitleBar.BackgroundColor3 = Color3.fromRGB(70, 0, 100)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Name = "TitleLabel"
+TitleLabel.Size = UDim2.new(0.7, 0, 1, 0)
+TitleLabel.Position = UDim2.new(0.05, 0, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "PVP Trainer Op By Branzz"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.TextSize = 16
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.Parent = TitleBar
+
+-- Botões da barra de título
+local MinimizeButton = Instance.new("TextButton")
+MinimizeButton.Name = "MinimizeButton"
+MinimizeButton.Size = UDim2.new(0, 25, 0, 25)
+MinimizeButton.Position = UDim2.new(0.8, 0, 0.08, 0)
+MinimizeButton.BackgroundColor3 = Color3.fromRGB(100, 0, 150)
+MinimizeButton.BorderSizePixel = 0
+MinimizeButton.Text = "_"
+MinimizeButton.TextColor3 = Color3.white
+MinimizeButton.TextSize = 18
+MinimizeButton.Font = Enum.Font.GothamBold
+MinimizeButton.Parent = TitleBar
+
+local MaximizeButton = Instance.new("TextButton")
+MaximizeButton.Name = "MaximizeButton"
+MaximizeButton.Size = UDim2.new(0, 25, 0, 25)
+MaximizeButton.Position = UDim2.new(0.88, 0, 0.08, 0)
+MaximizeButton.BackgroundColor3 = Color3.fromRGB(100, 0, 150)
+MaximizeButton.BorderSizePixel = 0
+MaximizeButton.Text = "□"
+MaximizeButton.TextColor3 = Color3.white
+MaximizeButton.TextSize = 14
+MaximizeButton.Font = Enum.Font.GothamBold
+MaximizeButton.Parent = TitleBar
+
+local CloseButton = Instance.new("TextButton")
+CloseButton.Name = "CloseButton"
+CloseButton.Size = UDim2.new(0, 25, 0, 25)
+CloseButton.Position = UDim2.new(0.96, 0, 0.08, 0)
+CloseButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+CloseButton.BorderSizePixel = 0
+CloseButton.Text = "X"
+CloseButton.TextColor3 = Color3.white
+CloseButton.TextSize = 14
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.Parent = TitleBar
+
+-- Conteúdo principal
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Name = "ContentFrame"
+ContentFrame.Size = UDim2.new(1, -10, 1, -40)
+ContentFrame.Position = UDim2.new(0, 5, 0, 35)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Parent = MainFrame
+
+-- Função para criar seções
+local function createSection(title, height)
+	local section = Instance.new("Frame")
+	section.Name = title .. "Section"
+	section.Size = UDim2.new(1, 0, 0, height)
+	section.BackgroundColor3 = Color3.fromRGB(60, 0, 85)
+	section.BorderColor3 = Color3.fromRGB(120, 0, 180)
+	section.BorderSizePixel = 1
+	section.Parent = ContentFrame
+	
+	local sectionTitle = Instance.new("TextLabel")
+	sectionTitle.Name = "SectionTitle"
+	sectionTitle.Size = UDim2.new(1, 0, 0, 25)
+	sectionTitle.BackgroundColor3 = Color3.fromRGB(80, 0, 120)
+	sectionTitle.BorderSizePixel = 0
+	sectionTitle.Text = "  " .. title
+	sectionTitle.TextColor3 = Color3.white
+	sectionTitle.TextSize = 14
+	sectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+	sectionTitle.Font = Enum.Font.GothamSemibold
+	sectionTitle.Parent = section
+	
+	return section
+end
+
+-- Seção 1: Marcar Posição
+local posSection = createSection("Marcar Posição", 80)
+posSection.Position = UDim2.new(0, 0, 0, 5)
+
+local MarkButton = Instance.new("TextButton")
+MarkButton.Name = "MarkButton"
+MarkButton.Size = UDim2.new(0.45, 0, 0, 35)
+MarkButton.Position = UDim2.new(0.05, 0, 0.5, 0)
+MarkButton.BackgroundColor3 = Color3.fromRGB(120, 0, 180)
+MarkButton.BorderSizePixel = 0
+MarkButton.Text = "Mark POSITION 📍"
+MarkButton.TextColor3 = Color3.white
+MarkButton.TextSize = 14
+MarkButton.Font = Enum.Font.GothamSemibold
+MarkButton.Parent = posSection
+
+local ClearButton = Instance.new("TextButton")
+ClearButton.Name = "ClearButton"
+ClearButton.Size = UDim2.new(0.45, 0, 0, 35)
+ClearButton.Position = UDim2.new(0.5, 0, 0.5, 0)
+ClearButton.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+ClearButton.BorderSizePixel = 0
+ClearButton.Text = "Clear Position 🗑️"
+ClearButton.TextColor3 = Color3.white
+ClearButton.TextSize = 14
+ClearButton.Font = Enum.Font.GothamSemibold
+ClearButton.Parent = posSection
+
+-- Seção 2: Voo Livre
+local flightSection = createSection("Voo Livre", 70)
+flightSection.Position = UDim2.new(0, 0, 0, 90)
+
+local FlightButton = Instance.new("TextButton")
+FlightButton.Name = "FlightButton"
+FlightButton.Size = UDim2.new(0.9, 0, 0, 35)
+FlightButton.Position = UDim2.new(0.05, 0, 0.5, 0)
+FlightButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+FlightButton.BorderSizePixel = 0
+FlightButton.Text = "Vôo Livre 🦅 (OFF)"
+FlightButton.TextColor3 = Color3.white
+FlightButton.TextSize = 14
+FlightButton.Font = Enum.Font.GothamSemibold
+FlightButton.Parent = flightSection
+
+-- Seção 3: TP Position
+local tpSection = createSection("Teleportar para Posição", 60)
+tpSection.Position = UDim2.new(0, 0, 0, 165)
+
+local TPButton = Instance.new("TextButton")
+TPButton.Name = "TPButton"
+TPButton.Size = UDim2.new(0.9, 0, 0, 35)
+TPButton.Position = UDim2.new(0.05, 0, 0.5, 0)
+TPButton.BackgroundColor3 = Color3.fromRGB(120, 0, 180)
+TPButton.BorderSizePixel = 0
+TPButton.Text = "TP POSITION 📍 🌏"
+TPButton.TextColor3 = Color3.white
+TPButton.TextSize = 14
+TPButton.Font = Enum.Font.GothamSemibold
+TPButton.Parent = tpSection
+
+-- Seção 4: Desync V1
+local desync1Section = createSection("Desync V1", 70)
+desync1Section.Position = UDim2.new(0, 0, 0, 230)
+
+local DesyncV1Button = Instance.new("TextButton")
+DesyncV1Button.Name = "DesyncV1Button"
+DesyncV1Button.Size = UDim2.new(0.9, 0, 0, 35)
+DesyncV1Button.Position = UDim2.new(0.05, 0, 0.5, 0)
+DesyncV1Button.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+DesyncV1Button.BorderSizePixel = 0
+DesyncV1Button.Text = "Desync v1 (OFF)"
+DesyncV1Button.TextColor3 = Color3.white
+DesyncV1Button.TextSize = 14
+DesyncV1Button.Font = Enum.Font.GothamSemibold
+DesyncV1Button.Parent = desync1Section
+
+-- Seção 5: Desync V2
+local desync2Section = createSection("Desync V2 (Melhorado)", 70)
+desync2Section.Position = UDim2.new(0, 0, 0, 305)
+
+local DesyncV2Button = Instance.new("TextButton")
+DesyncV2Button.Name = "DesyncV2Button"
+DesyncV2Button.Size = UDim2.new(0.9, 0, 0, 35)
+DesyncV2Button.Position = UDim2.new(0.05, 0, 0.5, 0)
+DesyncV2Button.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+DesyncV2Button.BorderSizePixel = 0
+DesyncV2Button.Text = "Desync v2 (OFF)"
+DesyncV2Button.TextColor3 = Color3.white
+DesyncV2Button.TextSize = 14
+DesyncV2Button.Font = Enum.Font.GothamSemibold
+DesyncV2Button.Parent = desync2Section
+
+-- Seção 6: Hitbox Expande
+local hitboxSection = createSection("Hitbox Expande", 90)
+hitboxSection.Position = UDim2.new(0, 0, 0, 380)
+
+local SizeBox = Instance.new("TextBox")
+SizeBox.Name = "SizeBox"
+SizeBox.Size = UDim2.new(0.6, 0, 0, 30)
+SizeBox.Position = UDim2.new(0.05, 0, 0.2, 0)
+SizeBox.BackgroundColor3 = Color3.fromRGB(40, 0, 60)
+SizeBox.BorderColor3 = Color3.fromRGB(100, 0, 150)
+SizeBox.BorderSizePixel = 1
+SizeBox.Text = "5"
+SizeBox.TextColor3 = Color3.white
+SizeBox.TextSize = 14
+SizeBox.PlaceholderText = "Tamanho da Hitbox"
+SizeBox.Font = Enum.Font.Gotham
+SizeBox.Parent = hitboxSection
+
+local HitboxButton = Instance.new("TextButton")
+HitboxButton.Name = "HitboxButton"
+HitboxButton.Size = UDim2.new(0.3, 0, 0, 30)
+HitboxButton.Position = UDim2.new(0.67, 0, 0.2, 0)
+HitboxButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+HitboxButton.BorderSizePixel = 0
+HitboxButton.Text = "OFF"
+HitboxButton.TextColor3 = Color3.white
+HitboxButton.TextSize = 14
+HitboxButton.Font = Enum.Font.GothamSemibold
+HitboxButton.Parent = hitboxSection
+
+local HitboxInfo = Instance.new("TextLabel")
+HitboxInfo.Name = "HitboxInfo"
+HitboxInfo.Size = UDim2.new(0.9, 0, 0, 20)
+HitboxInfo.Position = UDim2.new(0.05, 0, 0.7, 0)
+HitboxInfo.BackgroundTransparency = 1
+HitboxInfo.Text = "Parte branca transparente será a hitbox"
+HitboxInfo.TextColor3 = Color3.fromRGB(200, 200, 200)
+HitboxInfo.TextSize = 12
+HitboxInfo.Font = Enum.Font.Gotham
+HitboxInfo.Parent = hitboxSection
+
+-- Funções do sistema de arrastar (também para a barra de título)
+TitleBar.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		local dragStart = input.Position
+		local frameStart = MainFrame.Position
+		
+		local connection
+		connection = input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				connection:Disconnect()
+			else
+				local delta = input.Position - dragStart
+				MainFrame.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
+			end
+		end)
+	end
+end)
+
+-- Função para animar botão ON/OFF
+local function toggleButton(button, state)
+	if state then
+		-- Animar para verde
+		local tween = TweenService:Create(button, TweenInfo.new(0.3), {
+			BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+		})
+		tween:Play()
+		button.Text = button.Text:gsub("%(OFF%)", "(ON)"):gsub("%(ON%)", "(ON)")
+	else
+		-- Animar para vermelho
+		local tween = TweenService:Create(button, TweenInfo.new(0.3), {
+			BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+		})
+		tween:Play()
+		button.Text = button.Text:gsub("%(ON%)", "(OFF)"):gsub("%(OFF%)", "(OFF)")
+	end
+end
+
+-- 1. Função Mark Position
+MarkButton.MouseButton1Click:Connect(function()
+	if savedPosition then
+		-- Já existe uma posição salva
+		MarkButton.Text = "Já tem posição!"
+		wait(1)
+		MarkButton.Text = "Mark POSITION 📍"
+		return
+	end
+	
+	if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+		savedPosition = player.Character.HumanoidRootPart.Position
+		MarkButton.Text = "Posição Marcada!"
+		
+		-- Criar marcador visual
+		local marker = Instance.new("Part")
+		marker.Name = "PositionMarker"
+		marker.Size = Vector3.new(2, 2, 2)
+		marker.Position = savedPosition + Vector3.new(0, 1, 0)
+		marker.Anchored = true
+		marker.CanCollide = false
+		marker.Material = EnumMaterial.Neon
+		marker.BrickColor = BrickColor.new("Bright purple")
+		marker.Parent = workspace
+		
+		wait(1)
+		MarkButton.Text = "Mark POSITION 📍"
+	end
+end)
+
+-- 1.1 Função Clear Position
+ClearButton.MouseButton1Click:Connect(function()
+	savedPosition = nil
+	
+	-- Remover marcador visual
+	for _, obj in pairs(workspace:GetChildren()) do
+		if obj.Name == "PositionMarker" then
+			obj:Destroy()
+		end
+	end
+	
+	ClearButton.Text = "Posição Apagada!"
+	wait(0.5)
+	ClearButton.Text = "Clear Position 🗑️"
+end)
+
+-- 2. Sistema de Voo Livre
+local function setupFlight()
+	if flightConnection then
+		flightConnection:Disconnect()
+		flightConnection = nil
+	end
+	
+	local flightSpeed = 28
+	local flying = false
+	
+	FlightButton.MouseButton1Click:Connect(function()
+		flying = not flying
+		flightEnabled = flying
+		
+		toggleButton(FlightButton, flying)
+		
+		if flying then
+			FlightButton.Text = "Vôo Livre 🦅 (ON)"
+			
+			-- Sistema de voo
+			flightConnection = RunService.RenderStepped:Connect(function()
+				if flying and player.Character then
+					local humanoid = player.Character:FindFirstChild("Humanoid")
+					local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+					
+					if humanoid and rootPart then
+						-- Ativar voo no humanoid
+						humanoid.PlatformStand = true
+						
+						-- Mover na direção da câmera
+						local camera = workspace.CurrentCamera
+						if camera then
+							local direction = camera.CFrame.LookVector
+							rootPart.Velocity = direction * flightSpeed
+						end
+					end
+				end
+			end)
+		else
+			FlightButton.Text = "Vôo Livre 🦅 (OFF)"
+			
+			-- Resetar personagem
+			if player.Character then
+				local humanoid = player.Character:FindFirstChild("Humanoid")
+				if humanoid then
+					humanoid.PlatformStand = false
+				end
+			end
+		end
+	end)
+end
+
+setupFlight()
+
+-- 3. Função TP Position
+local function createPlatform(position)
+	local platform = Instance.new("Part")
+	platform.Size = Vector3.new(10, 1, 10)
+	platform.Position = position
+	platform.Anchored = true
+	platform.CanCollide = true
+	platform.Transparency = 0.5
+	platform.Material = EnumMaterial.Neon
+	platform.BrickColor = BrickColor.new("Bright violet")
+	platform.Parent = workspace
+	
+	table.insert(platformParts, platform)
+	
+	-- Remover após 8 segundos
+	wait(8)
+	if platform and platform.Parent then
+		platform:Destroy()
+	end
+	
+	-- Remover da tabela
+	for i, p in ipairs(platformParts) do
+		if p == platform then
+			table.remove(platformParts, i)
+			break
+		end
+	end
+end
+
+TPButton.MouseButton1Click:Connect(function()
+	if not savedPosition then
+		TPButton.Text = "Marque uma posição primeiro!"
+		wait(1)
+		TPButton.Text = "TP POSITION 📍 🌏"
+		return
+	end
+	
+	if not player.Character then return end
+	
+	local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+	if not rootPart then return end
+	
+	local startPos = rootPart.Position
+	local targetPos = savedPosition
+	local direction = (targetPos - startPos).Unit
+	
+	-- Ativar voo temporariamente
+	flightEnabled = true
+	local originalFlight = flightEnabled
+	
+	-- Configurar voo para TP
+	local tpFlightSpeed = 50
+	local distance = (targetPos - startPos).Magnitude
+	local steps = math.floor(distance / 10)
+	
+	-- Criar plataformas no caminho
+	coroutine.wrap(function()
+		for i = 1, steps do
+			local platformPos = startPos + (direction * (i * 10))
+			createPlatform(platformPos)
+			wait(3)
+		end
+	end)()
+	
+	-- Mover para a posição
+	coroutine.wrap(function()
+		local startTime = tick()
+		while (rootPart.Position - targetPos).Magnitude > 5 and tick() - startTime < 10 do
+			rootPart.Velocity = direction * tpFlightSpeed
+			wait()
+		end
+		
+		-- Chegou no destino
+		rootPart.Velocity = Vector3.new(0, 0, 0)
+		rootPart.Position = targetPos
+		flightEnabled = originalFlight
+	end)()
+end)
+
+-- 4. Função Desync V1
+DesyncV1Button.MouseButton1Click:Connect(function()
+	desyncV1Enabled = not desyncV1Enabled
+	toggleButton(DesyncV1Button, desyncV1Enabled)
+	
+	if desyncV1Enabled then
+		DesyncV1Button.Text = "Desync v1 (ON)"
+		
+		if player.Character then
+			-- Resetar personagem
+			local humanoid = player.Character:FindFirstChild("Humanoid")
+			if humanoid then
+				humanoid.Health = 0
+			end
+			
+			-- Aguardar respawn
+			player.CharacterAdded:Wait()
+			wait(0.5)
+			
+			-- Tornar hitbox invisível
+			if player.Character then
+				for _, part in pairs(player.Character:GetChildren()) do
+					if part:IsA("BasePart") then
+						part.Transparency = 1
+						part.CanCollide = false
+					end
+				end
+			end
+		end
+	else
+		DesyncV1Button.Text = "Desync v1 (OFF)"
+		
+		-- Resetar personagem novamente
+		if player.Character then
+			local humanoid = player.Character:FindFirstChild("Humanoid")
+			if humanoid then
+				humanoid.Health = 0
+			end
+		end
+	end
+end)
+
+-- 5. Função Desync V2
+DesyncV2Button.MouseButton1Click:Connect(function()
+	desyncV2Enabled = not desyncV2Enabled
+	toggleButton(DesyncV2Button, desyncV2Enabled)
+	
+	if desyncV2Enabled then
+		DesyncV2Button.Text = "Desync v2 (ON)"
+		
+		-- Sistema melhorado de lag
+		coroutine.wrap(function()
+			while desyncV2Enabled and player.Character do
+				-- Movimento aleatório para simular lag
+				local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+				if rootPart then
+					-- Aplicar pequenos movimentos aleatórios
+					local randomOffset = Vector3.new(
+						math.random(-5, 5),
+						math.random(-2, 2),
+						math.random(-5, 5)
+					)
+					
+					rootPart.CFrame = rootPart.CFrame + randomOffset
+					
+					-- Delay variável para simular lag
+					wait(math.random(0.1, 0.3))
+				else
+					wait(0.5)
+				end
+			end
+		end)()
+	else
+		DesyncV2Button.Text = "Desync v2 (OFF)"
+	end
+end)
+
+-- 6. Função Hitbox Expande
+HitboxButton.MouseButton1Click:Connect(function()
+	hitboxEnabled = not hitboxEnabled
+	toggleButton(HitboxButton, hitboxEnabled)
+	
+	if currentHitbox then
+		currentHitbox:Destroy()
+		currentHitbox = nil
+	end
+	
+	if hitboxEnabled then
+		HitboxButton.Text = "ON"
+		
+		-- Criar hitbox expandida
+		local size = tonumber(SizeBox.Text) or 5
+		
+		if player.Character then
+			local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+			if rootPart then
+				currentHitbox = Instance.new("Part")
+				currentHitbox.Name = "ExpandedHitbox"
+				currentHitbox.Size = Vector3.new(size, size, size)
+				currentHitbox.Position = rootPart.Position
+				currentHitbox.Anchored = true
+				currentHitbox.CanCollide = true
+				currentHitbox.Transparency = 0.7
+				currentHitbox.Material = EnumMaterial.Neon
+				currentHitbox.BrickColor = BrickColor.new("White")
+				currentHitbox.Parent = workspace
+				
+				-- Seguir o jogador
+				coroutine.wrap(function()
+					while hitboxEnabled and currentHitbox do
+						if rootPart and rootPart.Parent then
+							currentHitbox.Position = rootPart.Position
+						end
+						wait()
+					end
+				end)()
+			end
+		end
+	else
+		HitboxButton.Text = "OFF"
+	end
+end)
+
+-- Funções de minimizar/maximizar/fechar
+MinimizeButton.MouseButton1Click:Connect(function()
+	if not minimizado then
+		-- Minimizar: mostrar só a barra de título
+		ContentFrame.Visible = false
+		MainFrame.Size = UDim2.new(0, 350, 0, 30)
+		minimizado = true
+		MinimizeButton.Text = "□"
+	else
+		-- Maximizar: mostrar conteúdo completo
+		ContentFrame.Visible = true
+		MainFrame.Size = UDim2.new(0, 350, 0, 450)
+		minimizado = false
+		MinimizeButton.Text = "_"
+	end
+end)
+
+MaximizeButton.MouseButton1Click:Connect(function()
+	-- Centralizar a GUI
+	MainFrame.Position = UDim2.new(0.5, -175, 0.5, -225)
+end)
+
+CloseButton.MouseButton1Click:Connect(function()
+	-- Fechar todas as funcionalidades ativas
+	if flightConnection then
+		flightConnection:Disconnect()
+	end
+	
+	-- Remover hitbox
+	if currentHitbox then
+		currentHitbox:Destroy()
+	end
+	
+	-- Remover plataformas
+	for _, platform in pairs(platformParts) do
+		if platform and platform.Parent then
+			platform:Destroy()
+		end
+	end
+	
+	-- Remover marcador
+	for _, obj in pairs(workspace:GetChildren()) do
+		if obj.Name == "PositionMarker" then
+			obj:Destroy()
+		end
+	end
+	
+	-- Remover GUI
+	ScreenGui:Destroy()
+	guiEnabled = false
+end)
+
+-- Adicionar sombra/efeito visual
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+
+-- Adicionar cantos arredondados aos botões
+for _, button in pairs(MainFrame:GetDescendants()) do
+	if button:IsA("TextButton") then
+		local btnCorner = Instance.new("UICorner")
+		btnCorner.CornerRadius = UDim.new(0, 6)
+		btnCorner.Parent = button
+		
+		-- Efeito hover
+		button.MouseEnter:Connect(function()
+			local tween = TweenService:Create(button, TweenInfo.new(0.2), {
+				BackgroundTransparency = 0.1
+			})
+			tween:Play()
+		end)
+		
+		button.MouseLeave:Connect(function()
+			local tween = TweenService:Create(button, TweenInfo.new(0.2), {
+				BackgroundTransparency = 0
+			})
+			tween:Play()
+		end)
+	end
+end
+
+-- Notificação inicial
+TitleLabel.Text = "PVP Trainer Op By Branzz ✓"
+wait(1)
+TitleLabel.Text = "PVP Trainer Op By Branzz"
+
+print("GUI PVP Trainer carregada com sucesso!")
+print("Comandos disponíveis:")
+print("1. Mark Position - Marca uma posição no mapa")
+print("2. Voo Livre - Sistema de voo livre")
+print("3. TP Position - Teleporta para posição marcada")
+print("4. Desync v1 - Desconecta hitbox do corpo")
+print("5. Desync v2 - Sistema de lag melhorado")
+print("6. Hitbox Expande - Expande a hitbox do jogador")
